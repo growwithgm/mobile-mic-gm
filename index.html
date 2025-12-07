@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Mic to PC Text</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🎙️ Live Voice Note</h1>
+        
+        <div id="selection-screen">
+            <p>آپ اس وقت کس ڈیوائس پر ہیں؟</p>
+            <button onclick="startPCMode()">💻 میں PC پر ہوں (Receiver)</button>
+            <button onclick="startMobileMode()">📱 میں Mobile پر ہوں (Mic)</button>
+        </div>
+
+        <div id="pc-screen" class="hidden">
+            <div class="code-box">
+                <p>موبائل میں یہ کوڈ ڈالیں:</p>
+                <h2 id="my-peer-id">Generating...</h2>
+            </div>
+            <div class="status-indicator" id="pc-status">🔴 کنکشن کا انتظار ہے...</div>
+            <div class="text-area">
+                <h3>👇 آپ کی بات یہاں لکھی جائے گی:</h3>
+                <p id="received-text" class="content">...</p>
+            </div>
+        </div>
+
+        <div id="mobile-screen" class="hidden">
+            <input type="text" id="conn-id" placeholder="PC والا کوڈ یہاں لکھیں" maxlength="5">
+            <button onclick="connectToPC()">🔗 کنیکٹ کریں</button>
+            
+            <div id="mic-controls" class="hidden">
+                <div class="status-indicator" id="mobile-status">🟢 PC کے ساتھ کنیکٹڈ</div>
+                <button id="mic-btn" onclick="toggleMic()">🎤 مائک آن کریں</button>
+                <p id="speech-status">خاموش</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
