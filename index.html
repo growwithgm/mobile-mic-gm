@@ -1,47 +1,278 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ur" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Mic to PC Text</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Voice to PC - Live</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+
+    <style>
+        /* ============ CSS (ڈیزائن) ============ */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            width: 90%;
+            max-width: 450px;
+            transition: all 0.3s ease;
+        }
+
+        h1 { color: #2c3e50; margin-bottom: 20px; }
+        p { color: #555; font-size: 18px; }
+
+        /* بٹن کا اسٹائل */
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            margin: 10px 0;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 18px;
+            width: 100%;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        button:active { transform: scale(0.98); }
+        button.secondary { background-color: #6c757d; }
+        button.recording { 
+            background-color: #dc3545; 
+            animation: pulse 1.5s infinite; 
+        }
+
+        /* ان پٹ فیلڈ */
+        input {
+            width: 85%;
+            padding: 15px;
+            margin: 15px 0;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            font-size: 22px;
+            text-align: center;
+            letter-spacing: 5px;
+            outline: none;
+        }
+        input:focus { border-color: #007bff; }
+
+        /* چھپانے والا کلاس - یہ بہت اہم ہے */
+        .hidden { display: none !important; }
+
+        /* PC کوڈ باکس */
+        .code-display {
+            background: #e3f2fd;
+            color: #0d47a1;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 40px;
+            font-weight: bold;
+            letter-spacing: 5px;
+            margin: 20px 0;
+            border: 2px dashed #0d47a1;
+        }
+
+        /* ٹیکسٹ ایریا */
+        .text-box {
+            background: #fafafa;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 10px;
+            height: 200px;
+            overflow-y: auto;
+            text-align: right;
+            margin-top: 15px;
+            font-size: 20px;
+            line-height: 1.6;
+        }
+
+        .status { font-weight: bold; margin-top: 10px; font-size: 14px; }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+    </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>🎙️ Live Voice Note</h1>
-        
-        <div id="selection-screen">
-            <p>آپ اس وقت کس ڈیوائس پر ہیں؟</p>
-            <button onclick="startPCMode()">💻 میں PC پر ہوں (Receiver)</button>
-            <button onclick="startMobileMode()">📱 میں Mobile پر ہوں (Mic)</button>
+        <h1>🎙️ Live Voice App</h1>
+
+        <div id="screen-selection">
+            <p>آپ یہ ویب سائٹ کس پر استعمال کر رہے ہیں؟</p>
+            <button onclick="app.startPC()">💻 لیپ ٹاپ / PC (Receiver)</button>
+            <button class="secondary" onclick="app.startMobile()">📱 موبائل (Mic)</button>
         </div>
 
-        <div id="pc-screen" class="hidden">
-            <div class="code-box">
-                <p>موبائل میں یہ کوڈ ڈالیں:</p>
-                <h2 id="my-peer-id">Generating...</h2>
-            </div>
-            <div class="status-indicator" id="pc-status">🔴 کنکشن کا انتظار ہے...</div>
-            <div class="text-area">
-                <h3>👇 آپ کی بات یہاں لکھی جائے گی:</h3>
-                <p id="received-text" class="content">...</p>
-            </div>
-        </div>
-
-        <div id="mobile-screen" class="hidden">
-            <input type="text" id="conn-id" placeholder="PC والا کوڈ یہاں لکھیں" maxlength="5">
-            <button onclick="connectToPC()">🔗 کنیکٹ کریں</button>
+        <div id="screen-pc" class="hidden">
+            <p>اپنے موبائل میں یہ کوڈ لکھیں:</p>
+            <div class="code-display" id="display-code">...</div>
+            <div class="status" id="pc-status" style="color: orange;">🔴 موبائل کا انتظار ہے...</div>
             
-            <div id="mic-controls" class="hidden">
-                <div class="status-indicator" id="mobile-status">🟢 PC کے ساتھ کنیکٹڈ</div>
-                <button id="mic-btn" onclick="toggleMic()">🎤 مائک آن کریں</button>
-                <p id="speech-status">خاموش</p>
+            <div class="text-box">
+                <span id="output-text" style="color: #aaa;">آپ جو بولیں گے وہ یہاں لکھا جائے گا...</span>
             </div>
+            <button class="secondary" onclick="location.reload()" style="margin-top:20px; width:auto; padding: 10px;">Back</button>
+        </div>
+
+        <div id="screen-mobile" class="hidden">
+            <div id="step-connect">
+                <p>PC پر جو کوڈ نظر آ رہا ہے وہ یہاں لکھیں:</p>
+                <input type="number" id="input-code" placeholder="1234">
+                <button onclick="app.connectToPC()">🔗 کنیکٹ کریں</button>
+            </div>
+
+            <div id="step-mic" class="hidden">
+                <div class="status" style="color: green; margin-bottom: 20px;">🟢 PC کے ساتھ کنیکٹڈ</div>
+                <button id="btn-mic" onclick="app.toggleMic()">🎤 مائک آن کریں</button>
+                <p id="mic-status" style="margin-top: 15px;">خاموش</p>
+            </div>
+            <button class="secondary" onclick="location.reload()" style="margin-top:20px;">Back</button>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        // ============ JAVASCRIPT (لاجک) ============
+        
+        const app = {
+            peer: null,
+            conn: null,
+            recognition: null,
+            isRecording: false,
+            
+            // UI بدلنے کے لیے
+            show: (id) => {
+                document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
+                document.getElementById(id).classList.remove('hidden');
+            },
+
+            // --- PC Logic ---
+            startPC: () => {
+                app.show('screen-pc');
+                const code = Math.floor(1000 + Math.random() * 9000);
+                document.getElementById('display-code').innerText = code;
+
+                app.peer = new Peer("voice-app-" + code);
+                
+                app.peer.on('open', (id) => {
+                    console.log("My Peer ID is: " + id);
+                });
+
+                app.peer.on('connection', (c) => {
+                    app.conn = c;
+                    const status = document.getElementById('pc-status');
+                    status.innerText = "🟢 موبائل کنیکٹ ہو گیا!";
+                    status.style.color = "green";
+
+                    app.conn.on('data', (data) => {
+                        const out = document.getElementById('output-text');
+                        if(out.style.color === 'rgb(170, 170, 170)') {
+                            out.innerText = "";
+                            out.style.color = "#000";
+                        }
+                        out.innerText += " " + data;
+                    });
+                    
+                    // موبائل ڈسکنیکٹ ہونے پر
+                    app.conn.on('close', () => {
+                        status.innerText = "🔴 موبائل ڈسکنیکٹ ہو گیا";
+                        status.style.color = "red";
+                    });
+                });
+            },
+
+            // --- Mobile Logic ---
+            startMobile: () => {
+                app.show('screen-mobile');
+                app.peer = new Peer(); // Random ID for mobile
+            },
+
+            connectToPC: () => {
+                const code = document.getElementById('input-code').value;
+                if(!code) return alert("پہلے کوڈ لکھیں");
+
+                const btn = document.querySelector('#step-connect button');
+                btn.innerText = "کنیکٹ ہو رہا ہے...";
+                
+                app.conn = app.peer.connect("voice-app-" + code);
+
+                app.conn.on('open', () => {
+                    document.getElementById('step-connect').classList.add('hidden');
+                    document.getElementById('step-mic').classList.remove('hidden');
+                    app.setupMic();
+                });
+
+                app.conn.on('error', (err) => {
+                    alert("کنکشن نہیں ہو سکا۔ کوڈ دوبارہ چیک کریں۔");
+                    btn.innerText = "🔗 کنیکٹ کریں";
+                });
+                
+                // اگر 3 سیکنڈ میں کنیکٹ نہ ہو
+                setTimeout(() => {
+                    if(!app.conn.open) {
+                        btn.innerText = "🔗 کنیکٹ کریں";
+                        // alert("کوئی مسئلہ ہے۔ دوبارہ کوشش کریں۔");
+                    }
+                }, 4000);
+            },
+
+            // --- Mic Logic ---
+            setupMic: () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) return alert("براؤزر سپورٹڈ نہیں ہے۔ Chrome استعمال کریں۔");
+
+                app.recognition = new SpeechRecognition();
+                app.recognition.lang = 'ur-PK'; // اردو زبان
+                app.recognition.continuous = true;
+                app.recognition.interimResults = false;
+
+                app.recognition.onresult = (event) => {
+                    const last = event.results.length - 1;
+                    const text = event.results[last][0].transcript;
+                    
+                    document.getElementById('mic-status').innerText = "بھیجا گیا: " + text;
+                    if(app.conn) app.conn.send(text);
+                };
+
+                app.recognition.onend = () => {
+                    if(app.isRecording) app.recognition.start();
+                };
+            },
+
+            toggleMic: () => {
+                const btn = document.getElementById('btn-mic');
+                const status = document.getElementById('mic-status');
+
+                if(!app.isRecording) {
+                    app.recognition.start();
+                    app.isRecording = true;
+                    btn.innerText = "🛑 مائک بند کریں";
+                    btn.classList.add('recording');
+                    status.innerText = "بولیں، میں سن رہا ہوں...";
+                } else {
+                    app.recognition.stop();
+                    app.isRecording = false;
+                    btn.innerText = "🎤 مائک آن کریں";
+                    btn.classList.remove('recording');
+                    status.innerText = "خاموش";
+                }
+            }
+        };
+    </script>
 </body>
 </html>
