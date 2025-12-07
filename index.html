@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Voice Sync Ultimate</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ============ STYLES ============ */
+        :root { --primary: #007bff; --bg: #f4f7f6; --text: #333; }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--bg);
+            margin: 0; display: flex;
+            justify-content: center; align-items: center;
+            min-height: 100vh; color: var(--text);
+        }
+
+        .card {
+            background: white; width: 90%; max-width: 480px;
+            padding: 25px; border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h2 { margin-top: 0; color: #444; }
+        
+        button {
+            width: 100%; padding: 15px; margin: 8px 0;
+            border: none; border-radius: 12px;
+            font-size: 16px; font-weight: bold; cursor: pointer;
+            background: var(--primary); color: white;
+            transition: 0.2s;
+        }
+        button:active { transform: scale(0.98); }
+        button.secondary { background: #6c757d; }
+        button.stop { background: #dc3545; animation: pulse 2s infinite; }
+
+        input {
+            width: 100%; padding: 14px; margin: 10px 0;
+            border: 2px solid #ddd; border-radius: 12px;
+            font-size: 24px; text-align: center; letter-spacing: 3px;
+            box-sizing: border-box; outline: none;
+        }
+        input:focus { border-color: var(--primary); }
+
+        .hidden { display: none !important; }
+
+        /* PC View */
+        .code-box { 
+            font-size: 42px; font-weight: 800; color: var(--primary); 
+            letter-spacing: 5px; margin: 15px 0;
+        }
+        
+        .output-area {
+            background: #f8f9fa; border: 1px solid #e9ecef;
+            border-radius: 12px; padding: 15px;
+            height: 250px; overflow-y: auto; text-align: left;
+            margin-top: 15px; font-size: 18px; line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .interim-text { color: #888; font-style: italic; }
+
+        /* Status Badges */
+        .status { 
+            display: inline-block; padding: 5px 12px; 
+            border-radius: 15px; font-size: 13px; font-weight: 500;
+            margin-bottom: 10px; background: #e2e3e5; color: #383d41;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div id="view-select">
+            <h2>Select Device</h2>
+            <button onclick="app.initPC()">💻 PC (Receiver)</button>
+            <button class="secondary" onclick="app.initMobile()">📱 Mobile (Mic)</button>
+        </div>
+
+        <div id="view-pc" class="hidden">
+            <span id="pc-status" class="status">Waiting...</span>
+            <p>Code for Mobile:</p>
+            <div class="code-box" id="pc-code">...</div>
+            
+            <div class="output-area" id="textBox">
+                <span id="txt-final"></span><span id="txt-interim" class="interim-text"></span>
+            </div>
+            
+            <button class="secondary" onclick="app.copyText()">Copy Text</button>
+            <button class="secondary" onclick="location.reload()" style="background:#444">Back</button>
+        </div>
+
+        <div id="view-mobile" class="hidden">
+            <div id="m-step1">
+                <h2>Connect</h2>
+                <input type="number" id="input-code" placeholder="Enter PC Code">
+                <button onclick="app.connect()">🔗 Connect to PC</button>
+                <p style="font-size:12px; color:red; display:none" id="conn-error">Connection Failed. Ensure both devices are on SAME Wi-Fi.</p>
+            </div>
+
+            <div id="m-step2" class="hidden">
+                <span class="status connected">Connected to PC</span>
+                <div style="margin: 20px 0;">
+                    <button id="btn-mic" onclick="app.toggleMic()">🎤 Start Mic</button>
+                </div>
+                <p id="mic-msg" style="color:#666">Tap Start to speak</p>
+                <button class="secondary" onclick="location.reload()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            peer: null, conn: null, recognition: null, 
+            isMicOn: false, wakeLock: null,
+
+            // --- Helper ---
+            show: (id) => {
+                ['view-select', 'view-pc', 'view-mobile'].forEach(v => document.getElementById(v).classList.add('hidden'));
+                document.getElementById(id).classList.remove('hidden');
+            },
+
+            // --- PC Logic ---
+            initPC: () => {
+                app.show('view-pc');
+                const id = Math.floor(1000 + Math.random() * 9000);
+                document.getElementById('pc-code').innerText = id;
+
+                // Better Config for connections
+                app.peer = new Peer('voice-app-' + id, {
+                    config: { 'iceServers': [ { urls: 'stun:stun.l.google.com:19302' } ] } // Google STUN
+                });
+
+                app.peer.on('connection', (c) => {
+                    app.conn = c;
+                    document.getElementById('pc-status').innerText = "🟢 Mobile Connected";
+                    document.getElementById('pc-status').classList.add('connected');
+
+                    app.conn.on('data', (data) => {
+                        // FIX: Logic to prevent repetition
+                        if (data.type === 'final') {
+                            // Append final text and clear interim
+                            document.getElementById('txt-final').innerText += data.text + " ";
+                            document.getElementById('txt-interim').innerText = "";
+                            
+                            // Auto scroll
+                            const box = document.getElementById('textBox');
+                            box.scrollTop = box.scrollHeight;
+                        } 
+                        else if (data.type === 'interim') {
+                            // Just update interim preview
+                            document.getElementById('txt-interim').innerText = data.text;
+                        }
+                    });
+
+                    app.conn.on('close', () => alert("Mobile Disconnected"));
+                });
+            },
+
+            // --- Mobile Logic ---
+            initMobile: () => {
+                app.show('view-mobile');
+                app.peer = new Peer(); // Auto ID
+            },
+
+            connect: () => {
+                const code = document.getElementById('input-code').value;
+                if (!code) return alert("Enter code");
+                
+                const btn = document.querySelector('#m-step1 button');
+                btn.innerText = "Connecting...";
+                
+                app.conn = app.peer.connect('voice-app-' + code);
+
+                app.conn.on('open', () => {
+                    document.getElementById('m-step1').classList.add('hidden');
+                    document.getElementById('m-step2').classList.remove('hidden');
+                    app.keepScreenOn();
+                    app.setupSpeech();
+                });
+
+                app.conn.on('error', (err) => {
+                    btn.innerText = "🔗 Connect to PC";
+                    document.getElementById('conn-error').style.display = 'block';
+                });
+                
+                // Fallback timeout
+                setTimeout(() => {
+                    if(!app.conn.open) {
+                         btn.innerText = "🔗 Connect to PC";
+                         document.getElementById('conn-error').style.display = 'block';
+                    }
+                }, 5000);
+            },
+
+            // --- Fixed Speech Logic ---
+            setupSpeech: () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) return alert("Browser not supported.");
+
+                app.recognition = new SpeechRecognition();
+                app.recognition.lang = 'ur-PK'; 
+                app.recognition.continuous = true; 
+                app.recognition.interimResults = true;
+
+                app.recognition.onresult = (event) => {
+                    let interimStr = '';
+
+                    // This LOOP caused the issue. FIXED now.
+                    // We only look at results that changed
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        const transcript = event.results[i][0].transcript;
+                        
+                        if (event.results[i].isFinal) {
+                            // Send FINAL immediately to PC to 'lock' it
+                            app.send('final', transcript);
+                        } else {
+                            interimStr += transcript;
+                        }
+                    }
+
+                    // Send INTERIM just for preview
+                    if (interimStr) {
+                        app.send('interim', interimStr);
+                    }
+                };
+
+                app.recognition.onend = () => {
+                    if (app.isMicOn) app.recognition.start(); // Auto restart
+                };
+            },
+
+            toggleMic: () => {
+                const btn = document.getElementById('btn-mic');
+                const msg = document.getElementById('mic-msg');
+
+                if (!app.isMicOn) {
+                    app.recognition.start();
+                    app.isMicOn = true;
+                    btn.innerText = "🛑 STOP MIC";
+                    btn.className = "stop";
+                    msg.innerText = "Listening...";
+                } else {
+                    app.recognition.stop();
+                    app.isMicOn = false;
+                    btn.innerText = "🎤 Start Mic";
+                    btn.className = "";
+                    msg.innerText = "Mic Stopped";
+                }
+            },
+
+            send: (type, text) => {
+                if (app.conn && app.conn.open) {
+                    app.conn.send({ type: type, text: text });
+                }
+            },
+
+            keepScreenOn: async () => {
+                try {
+                    if ('wakeLock' in navigator) {
+                        app.wakeLock = await navigator.wakeLock.request('screen');
+                    }
+                } catch(e) { console.log(e); }
+            },
+
+            copyText: () => {
+                const t = document.getElementById('txt-final').innerText + " " + document.getElementById('txt-interim').innerText;
+                navigator.clipboard.writeText(t).then(()=>alert("Copied!"));
+            }
+        };
+    </script>
+</body>
+</html>
